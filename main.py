@@ -7,7 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import pytz
 
 # ------------------ تنظیمات ------------------
-BOT_TOKEN = "8549313349:AAFFuPlLNJTAHJI5B1Vl3PORCgI5d1wuUGw"        # <-- اینو عوض کن
+BOT_TOKEN = '8549313349:AAFFuPlLNJTAHJI5B1Vl3PORCgI5d1wuUGw'        # <-- اینو عوض کن
 ADMIN_IDS = [5382898102]             # <-- شناسه(های) ادمین رو اینجا بگذار
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="html")
@@ -711,3 +711,4 @@ def handle_all_messages(message):
             bot.reply_to(message, "⚠️ شما در لیست نبودید.")
         update_main_message(chat_id_str)
         return
+
