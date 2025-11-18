@@ -711,7 +711,3 @@ def handle_all_messages(message):
             bot.reply_to(message, "⚠️ شما در لیست نبودید.")
         update_main_message(chat_id_str)
         return
-
-    # ارسال لیست با /لیست (این حالت احتمالاً توسط بالا پوشش داده شده)
-    if cmd.lower() == "لیست":
-        if chat_id_str not in players_dict: players_dict[chat_id_str] =
