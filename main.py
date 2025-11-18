@@ -2,7 +2,6 @@ import telebot
 from threading import Lock
 import json, os, random
 from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime
 import pytz
 
 bot = telebot.TeleBot('8549313349:AAFFuPlLNJTAHJI5B1Vl3PORCgI5d1wuUGw', parse_mode='html')
@@ -62,7 +61,11 @@ def add_name(user_name, chat_id):
     with lock:
         if str(chat_id) not in players_dict:
             players_dict[str(chat_id)] = []
-        if user_name not in players_dict[str(chat_id)] and len(players_dict[str(chat_id)]) < 16:
+        if user_name in illegal_names:
+            return "illegal"
+        if len(players_dict[str(chat_id)]) >= 16:
+            return False
+        if user_name not in players_dict[str(chat_id)]:
             players_dict[str(chat_id)].append(user_name)
             save_data()
             return True
@@ -100,7 +103,7 @@ def generate_role_prediction(chat_id):
         prediction += f"{prefix} {idx+1}- {player} - نقش: {role}\n"
     return "<b>پیش‌بینی نقش‌ها:</b>\n" + prediction
 
-# ------------------ دستورات ------------------
+# ------------------ ارسال لیست ------------------
 @bot.message_handler(commands=['start', 'لیست'])
 def send_list(message):
     chat_id = str(message.chat.id)
@@ -113,6 +116,28 @@ def send_list(message):
             bot.pin_chat_message(chat_id, sent.message_id, disable_notification=True)
         except: pass
         save_data()
+
+# ------------------ ارسال پیام لابی با تگ اعضای حاضر ------------------
+@bot.message_handler(func=lambda m: "لابی ساعت" in m.text)
+def lobby_message(message):
+    chat_id = str(message.chat.id)
+    try:
+        # ارسال پیام لابی
+        sent_msg = bot.send_message(chat_id, message.text)
+        bot.pin_chat_message(chat_id, sent_msg.message_id, disable_notification=True)
+
+        # تگ کردن بازیکنان حاضر در گروه
+        mentions_text = ""
+        current_players = players_dict.get(chat_id, [])
+        for player in current_players:
+            mentions_text += f"@{player} "
+        
+        if mentions_text:
+            bot.send_message(chat_id, mentions_text, reply_to_message_id=sent_msg.message_id)
+
+        bot.reply_to(message, "📌 پیام لابی ارسال و اعضای حاضر تگ شدند!")
+    except Exception as e:
+        bot.reply_to(message, f"❌ خطا در ارسال لابی: {e}")
 
 # ------------------ هندلر پیام‌ها ------------------
 @bot.message_handler(func=lambda m: True)
@@ -127,30 +152,34 @@ def handle_messages(message):
 
     cmd = text[1:].strip()  # حذف اسلش
 
-    # اضافه کردن کاربر
-    if cmd.lower() == "اضافه":
-        if add_name(user_name, chat_id):
-            bot.reply_to(message, random.choice(funny_add_messages))
-        else:
-            bot.reply_to(message, "⚠️ نتوانست اضافه شود!")
-        bot.edit_message_text(generate_list(chat_id), chat_id, main_message_dict[chat_id])
+    if not cmd:
+        bot.reply_to(message, "🚨 فرمان نامعتبره! لطفا بعد از / اسم یا دستور وارد کنید")
         return
 
-    # حذف خود
-    if cmd.lower() in ["حذف", "remove"]:
-        if remove_name(user_name, chat_id):
-            bot.reply_to(message, random.choice(funny_remove_messages))
-        else:
-            bot.reply_to(message, "⚠️ شما در لیست نبودید!")
-        bot.edit_message_text(generate_list(chat_id), chat_id, main_message_dict[chat_id])
+    # ---------- ثبت ناظر ----------
+    if cmd.startswith("ناظر"):
+        parts = cmd.split()
+        if len(parts) >= 3:
+            nazor_type = parts[1]
+            nazor_name = " ".join(parts[2:]).strip()
+            if chat_id not in nazor_dict:
+                nazor_dict[chat_id] = ["___", "___"]
+            if nazor_type in ["1","یک","۱"]:
+                nazor_dict[chat_id][0] = nazor_name
+            elif nazor_type in ["2","دو","۲"]:
+                nazor_dict[chat_id][1] = nazor_name
+            save_data()
+            bot.reply_to(message, f"👁‍🗨 ناظر ثبت شد: {nazor_name}")
+            if chat_id in main_message_dict:
+                bot.edit_message_text(generate_list(chat_id), chat_id, main_message_dict[chat_id])
         return
 
-    # پیش‌بینی نقش‌ها
+    # ---------- پیش‌بینی نقش‌ها ----------
     if cmd.lower() in ["پیشبینی", "پیشبینی نقش"]:
         bot.reply_to(message, generate_role_prediction(chat_id))
         return
 
-    # ریست (فقط ادمین)
+    # ---------- ریست ----------
     if cmd.lower() == "ریست":
         try:
             admins = bot.get_chat_administrators(message.chat.id)
@@ -161,6 +190,28 @@ def handle_messages(message):
                 bot.reply_to(message, "❌ فقط ادمین می‌تواند ریست کند.")
         except: pass
         return
+
+    # ---------- حذف خود ----------
+    if cmd.lower() in ["حذف", "remove"]:
+        if remove_name(user_name, chat_id):
+            bot.reply_to(message, random.choice(funny_remove_messages))
+        else:
+            bot.reply_to(message, "⚠️ شما در لیست نبودید!")
+        if chat_id in main_message_dict:
+            bot.edit_message_text(generate_list(chat_id), chat_id, main_message_dict[chat_id])
+        return
+
+    # ---------- اضافه کردن بازیکن ----------
+    result = add_name(cmd, chat_id)
+    if result == "illegal":
+        bot.reply_to(message,"🚨 نام غیرمجاز!")
+    elif result is True:
+        bot.reply_to(message,f"✔ {cmd} اضافه شد!")
+        bot.reply_to(message, random.choice(funny_add_messages))
+    else:
+        bot.reply_to(message,"⚠️ اضافه نشد! یا قبلا هست یا لیست پر است.")
+    if chat_id in main_message_dict:
+        bot.edit_message_text(generate_list(chat_id), chat_id, main_message_dict[chat_id])
 
 # ------------------ زمان‌بندی ------------------
 def schedule_jobs():
